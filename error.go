@@ -8,6 +8,7 @@ var ErrLockAlreadyExpired = errors.New("lock was already expired")
 // ErrLockAcquiredByOthers ErrLockNotAcquired is the error resulting others acquired the lock.
 var ErrLockAcquiredByOthers = errors.New("lock is acquired by others")
 
+// IsRetryableErr checks if the error is retryable, only ErrLockAcquiredByOthers is retryable.
 func IsRetryableErr(err error) bool {
 	return errors.Is(err, ErrLockAcquiredByOthers)
 }

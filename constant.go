@@ -7,8 +7,8 @@ const (
 	KeyPrefix = "redis_lock:"
 	// DefaultLockExpire is the default expire time of the lock
 	DefaultLockExpire = 8 * time.Second
-	// WatchDogWorkStep  is the time interval of the watchdog
-
+	// DefaultBlockWaitingTime is the default block waiting time
 	DefaultBlockWaitingTime = 5 * time.Second
-	WatchDogWorkStep        = 10 * time.Second
+	// WatchDogWorkStep is the time interval of the watchdog
+	WatchDogWorkStep = 10 * time.Second
 )

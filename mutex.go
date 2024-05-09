@@ -193,6 +193,7 @@ func (m *Mutex) delay(ctx context.Context, pool client.Pool, delay int64) (bool,
 
 func (m *Mutex) watchDog(ctx context.Context) {
 	// ensure the previous watch dog has been recycled
+	// use compare and swap operation to avoid
 	for !atomic.CompareAndSwapInt32(&m.runningDog, 0, 1) {
 	}
 
@@ -216,44 +217,41 @@ func (m *Mutex) runWatchDog(ctx context.Context) {
 			return
 		default:
 		}
-		// 看门狗负责在用户未显式解锁时，持续为分布式锁进行续期w
-		// 通过 lua 脚本，延期之前会确保保证锁仍然属于自己
-		// 为避免因为网络延迟而导致锁被提前释放的问题，watch dog 续约时需要把锁的过期时长额外增加 5 s
+		// watchDog is charged with renewing the lock for the user when the user does not explicitly unlock it
+		// through the lua script, the extension will ensure that the lock still belongs to itself before
+		// to avoid the problem that the lock is released early due to network latency,
+		// the watch dog renewal needs to increase the expiration time of the lock by an additional 5 seconds
 		_, _ = m.DelayExpire(ctx, WatchDogWorkStep+5)
 	}
 }
 
-func (m *Mutex) blockingLock(ctx context.Context) error {
-	// 阻塞模式等锁时间上限
+func (m *Mutex) blockingLock(ctx context.Context) (err error) {
 	timeoutCh := time.After(m.blockWaitingTime)
-	// 轮询 ticker，每隔 50 ms 尝试取锁一次
+	// tick every 50 ms to try lock
 	ticker := time.NewTicker(time.Duration(50) * time.Millisecond)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		select {
-		// ctx 终止了
+		// ctx is canceled
 		case <-ctx.Done():
 			return fmt.Errorf("lock failed, ctx timeout, err: %w", ctx.Err())
-			// 阻塞等锁达到上限时间
+			// timeout
 		case <-timeoutCh:
 			return fmt.Errorf("block waiting time out, err: %w", ErrLockAcquiredByOthers)
-		// 放行
 		default:
 		}
 
-		// 尝试取锁
-		err := m.tryLock(ctx)
+		err = m.tryLock(ctx)
 		if err == nil {
-			// 加锁成功，返回结果
+			// locked success
 			return nil
 		}
 
-		// 不可重试类型的错误，直接返回
+		// not the error of lock acquired by others, directly return
 		if !IsRetryableErr(err) {
 			return err
 		}
 	}
-	// 不可达
-	return nil
+	return
 }
